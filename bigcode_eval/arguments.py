@@ -7,6 +7,7 @@ class EvalArguments:
     """
     Configuration for running the evaluation.
     """
+
     prefix: Optional[str] = field(
         default="",
         metadata={
@@ -25,10 +26,6 @@ class EvalArguments:
     )
     top_p: Optional[float] = field(
         default=0.95, metadata={"help": "Top-p parameter used for nucleus sampling."}
-    )
-    n_samples: Optional[int] = field(
-        default=1,
-        metadata={"help": "Number of completions to generate for each sample."},
     )
     eos: Optional[str] = field(
         default="<|endoftext|>", metadata={"help": "end of sentence token."}

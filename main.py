@@ -13,6 +13,8 @@ from transformers import (
     AutoTokenizer,
     HfArgumentParser,
 )
+import argparse
+import yaml
 
 from bigcode_eval.arguments import EvalArguments
 from bigcode_eval.evaluator import Evaluator
@@ -37,27 +39,27 @@ class MultiChoice:
 
 
 def parse_args():
-    parser = HfArgumentParser(EvalArguments)
-
+    parser = HfArgumentParser(EvalArguments, argument_default=argparse.SUPPRESS)
+    parser.add_argument("--config", type=str, help="Path to YAML config file")
     parser.add_argument(
         "--model",
-        default="codeparrot/codeparrot-small",
+        # default="codeparrot/codeparrot-small",
         help="Model to evaluate, provide a repo name in Hugging Face hub or a local path",
     )
     parser.add_argument(
         "--modeltype",
-        default="causal",
+        # default="causal",
         help="AutoModel to use, it can be causal or seq2seq",
     )
     parser.add_argument(
         "--peft_model",
         type=str,
-        default=None,
+        # default=None,
         help="Adapter to the PEFT base model. Can be utilized for loading PEFT adapters such as a LoRA trained model. The --model parameter needs to be the base model.",
     )
     parser.add_argument(
         "--revision",
-        default=None,
+        # default=None,
         help="Model revision to use",
     )
     parser.add_argument(
@@ -72,31 +74,31 @@ def parse_args():
     )
     parser.add_argument(
         "--tasks",
-        default=None,
-        choices=MultiChoice(ALL_TASKS),
+        # default=None,
+        # choices=MultiChoice(ALL_TASKS),
         help=f"Evaluation tasks from {ALL_TASKS}",
     )
     parser.add_argument(
         "--instruction_tokens",
-        default=None,
+        # default=None,
         help="A series of instruction tokens used for instruction-tuning benchamrks separated by comma e.g. <user_message>,<end_user_message>,<assistant_message>",
     )
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=1,
+        # default=1,
         help="Batch size for evaluation on each worker, can be larger for HumanEval",
     )
     parser.add_argument(
         "--max_length_generation",
         type=int,
-        default=512,
+        # default=512,
         help="Maximum length of generated sequence (prompt+generation)",
     )
     parser.add_argument(
         "--precision",
         type=str,
-        default="fp32",
+        # default="fp32",
         help="Model precision, from: fp32, fp16 or bf16",
     )
     parser.add_argument(
@@ -117,19 +119,19 @@ def parse_args():
     parser.add_argument(
         "--limit",
         type=int,
-        default=None,
+        # default=None,
         help="Number of samples to solve and evaluate from the benchmark",
     )
     parser.add_argument(
         "--limit_start",
         type=int,
-        default=0,
+        # default=0,
         help="Optional offset to start from when limiting the number of samples",
     )
     parser.add_argument(
         "--save_every_k_tasks",
         type=int,
-        default=-1,
+        # default=-1,
         help="Optional saving after every k tasks",
     )
     parser.add_argument(
@@ -150,19 +152,19 @@ def parse_args():
     parser.add_argument(
         "--load_generations_path",
         type=str,
-        default=None,
+        # default=None,
         help="Path of file with previously generated solutions, if provided generation is skipped and only evaluation is done",
     )
     parser.add_argument(
         "--load_data_path",
         type=str,
-        default=None,
+        # default=None,
         help="Path of additional data to load for the tasks",
     )
     parser.add_argument(
         "--metric_output_path",
         type=str,
-        default="evaluation_results.json",
+        # default="evaluation_results.json",
         help="Path to save the results",
     )
     parser.add_argument(
@@ -179,7 +181,7 @@ def parse_args():
     parser.add_argument(
         "--save_generations_path",
         type=str,
-        default="generations.json",
+        # default="generations.json",
         help="Path for saving the code generations",
     )
     parser.add_argument(
@@ -190,19 +192,19 @@ def parse_args():
     parser.add_argument(
         "--save_references_path",
         type=str,
-        default="references.json",
+        # default="references.json",
         help="Path for saving the references solutions/tests",
     )
     parser.add_argument(
         "--prompt",
         type=str,
-        default="prompt",
+        # default="prompt",
         help="Prompt type to use for generation in HumanEvalPack tasks",
     )
     parser.add_argument(
         "--max_memory_per_gpu",
         type=str,
-        default=None,
+        # default=None,
         help="Max memroy to allocate per gpu, you can also use 'auto'",
     )
     parser.add_argument(
@@ -210,7 +212,87 @@ def parse_args():
         action="store_true",
         help="Don't run generation but benchmark groundtruth (useful for debugging)",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--n_samples",
+        type=int,
+        help="Number of samples to generate per task, \
+        if the task supports multiple generations per sample (e.g. HumanEvalPack)",
+    )
+
+    # Parse CLI args
+    cli_args = vars(parser.parse_args())
+    # 1) Load the YAML config if provided
+    config_dir = None
+    yaml_config = {}
+    if cli_args.get("config"):
+        config_path = os.path.abspath(cli_args["config"])
+        config_dir = os.path.dirname(config_path)
+        with open(config_path, "r") as f:
+            yaml_config = yaml.safe_load(f) or {}
+
+    intended_defaults = {
+        "model": "codeparrot/codeparrot-small",
+        "modeltype": "causal",
+        "peft_model": None,
+        "revision": None,
+        "use_auth_token": False,
+        "trust_remote_code": True,
+        "tasks": None,
+        "instruction_tokens": None,
+        "batch_size": 1,
+        "max_length_generation": 512,
+        "precision": "fp32",
+        "load_in_8bit": False,
+        "load_in_4bit": False,
+        "left_padding": False,
+        "limit": None,
+        "limit_start": 0,
+        "save_every_k_tasks": -1,
+        "postprocess": True,  # Since action="store_false"
+        "allow_code_execution": True,
+        "generation_only": False,
+        "load_generations_path": None,
+        "load_data_path": None,
+        "metric_output_path": "evaluation_results.json",
+        "save_generations": False,
+        "load_generations_intermediate_paths": None,
+        "save_generations_path": "generations.json",
+        "save_references": False,
+        "save_references_path": "references.json",
+        "prompt": "prompt",
+        "max_memory_per_gpu": None,
+        "check_references": False,
+        "n_samples": 1,
+    }
+    # 3) Merge defaults < YAML config < CLI
+    merged = intended_defaults.copy()
+    merged.update(yaml_config)
+
+    for key, value in cli_args.items():
+        merged[key] = value
+
+    # Ensure flags have a value; if still missing, default to False
+    for flag in [
+        "use_auth_token",
+        "trust_remote_code",
+        "load_in_8bit",
+        "load_in_4bit",
+        "left_padding",
+        "postprocess",  # store_false → default True if not set
+        "allow_code_execution",
+        "generation_only",
+        "save_generations",
+        "save_references",
+        "check_references",
+    ]:
+        if flag not in merged:
+            merged[flag] = False
+
+    # Handle postprocess explicitly since it's store_false
+    if "postprocess" not in merged:
+        merged["postprocess"] = True
+
+    return argparse.Namespace(**merged)
 
 
 def pattern_match(patterns, source_list):
@@ -231,6 +313,7 @@ def get_gpus_max_memory(max_memory, num_gpus):
 
 def main():
     args = parse_args()
+    print(f"Parsed args: {args}")
     transformers.logging.set_verbosity_error()
     datasets.logging.set_verbosity_error()
 
@@ -276,7 +359,7 @@ def main():
             print("Loading model in 4bit")
             model_kwargs["load_in_4bit"] = args.load_in_4bit
             model_kwargs["torch_dtype"] = torch.float16
-            model_kwargs["bnb_4bit_compute_dtype"] = torch.float16            
+            model_kwargs["bnb_4bit_compute_dtype"] = torch.float16
             model_kwargs["device_map"] = {"": accelerator.process_index}
         else:
             print(f"Loading model in {args.precision}")
@@ -291,7 +374,37 @@ def main():
                 else:
                     model_kwargs["device_map"] = "auto"
                     print("Loading model in auto mode")
-
+        if args.left_padding:
+            # left padding is required for some models like chatglm3-6b
+            tokenizer = AutoTokenizer.from_pretrained(
+                args.model,
+                revision=args.revision,
+                trust_remote_code=args.trust_remote_code,
+                token=args.use_auth_token,
+                padding_side="left",
+            )
+        else:
+            # used by default for most models
+            tokenizer = AutoTokenizer.from_pretrained(
+                args.model,
+                revision=args.revision,
+                trust_remote_code=args.trust_remote_code,
+                token=args.use_auth_token,
+                truncation_side="left",
+                padding_side="right",
+            )
+        if not tokenizer.eos_token:
+            if tokenizer.bos_token:
+                tokenizer.eos_token = tokenizer.bos_token
+                print("bos_token used as eos_token")
+            else:
+                raise ValueError("No eos_token or bos_token found")
+        try:
+            tokenizer.pad_token = tokenizer.eos_token
+        # Some models like CodeGeeX2 have pad_token as a read-only property
+        except AttributeError:
+            print("Not setting pad_token to eos_token")
+            pass
         if args.modeltype == "causal":
             model = AutoModelForCausalLM.from_pretrained(
                 args.model,
@@ -309,51 +422,19 @@ def main():
             raise ValueError(
                 f"Non valid modeltype {args.modeltype}, choose from: causal, seq2seq"
             )
-
+        model.resize_token_embeddings(len(tokenizer))
         if args.peft_model:
             from peft import PeftModel  # dynamic import to avoid dependency on peft
 
             model = PeftModel.from_pretrained(model, args.peft_model)
             print("Loaded PEFT model. Merging...")
-            model.merge_and_unload()
+            # model.merge_and_unload()
             print("Merge complete.")
 
-        if args.left_padding:
-            # left padding is required for some models like chatglm3-6b
-            tokenizer = AutoTokenizer.from_pretrained(
-                args.model,
-                revision=args.revision,
-                trust_remote_code=args.trust_remote_code,
-                token=args.use_auth_token,
-                padding_side="left",  
-            )
-        else:
-            # used by default for most models
-            tokenizer = AutoTokenizer.from_pretrained(
-                args.model,
-                revision=args.revision,
-                trust_remote_code=args.trust_remote_code,
-                token=args.use_auth_token,
-                truncation_side="left",
-                padding_side="right",  
-            )
-        if not tokenizer.eos_token:
-            if tokenizer.bos_token:
-                tokenizer.eos_token = tokenizer.bos_token
-                print("bos_token used as eos_token")
-            else:
-                raise ValueError("No eos_token or bos_token found")
-        try:
-            tokenizer.pad_token = tokenizer.eos_token
-            
-        # Some models like CodeGeeX2 have pad_token as a read-only property
-        except AttributeError:
-            print("Not setting pad_token to eos_token")
-            pass
         WIZARD_LLAMA_MODELS = [
             "WizardLM/WizardCoder-Python-34B-V1.0",
             "WizardLM/WizardCoder-34B-V1.0",
-            "WizardLM/WizardCoder-Python-13B-V1.0"
+            "WizardLM/WizardCoder-Python-13B-V1.0",
         ]
         if args.model in WIZARD_LLAMA_MODELS:
             tokenizer.bos_token = "<s>"
@@ -362,10 +443,9 @@ def main():
 
         evaluator = Evaluator(accelerator, model, tokenizer, args)
 
-        if (
+        if args.load_generations_intermediate_paths and len(
             args.load_generations_intermediate_paths
-            and len(args.load_generations_intermediate_paths) != len(task_names)
-        ):
+        ) != len(task_names):
             raise ValueError(
                 "If passing --load_generations_intermediate_paths, \
                 must pass equal number of files as number of tasks"
@@ -386,7 +466,7 @@ def main():
                     task, intermediate_generations=intermediate_generations
                 )
                 if accelerator.is_main_process:
-                    save_generations_path = f"{os.path.splitext(args.save_generations_path)[0]}_{task}.json"
+                    save_generations_path = f"{os.path.splitext(args.save_generations_path)[0]}_generations_{task}.json"
                     save_references_path = f"references_{task}.json"
                     evaluator.save_json_files(
                         generations,
@@ -405,8 +485,15 @@ def main():
         dumped = json.dumps(results, indent=2)
         if accelerator.is_main_process:
             print(dumped)
+        # Ensure the output directory exists
 
-        with open(args.metric_output_path, "w") as f:
+        os.makedirs(args.metric_output_path, exist_ok=True)
+
+        # Construct full path to results.json inside that directory
+        metric_file_path = os.path.join(args.metric_output_path, "results.json")
+
+        # Write the results to the file
+        with open(metric_file_path, "w") as f:
             f.write(dumped)
 
 
